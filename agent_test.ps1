@@ -147,7 +147,7 @@ $query = New-Object System.Diagnostics.Eventing.Reader.EventLogQuery(
 $watcher = New-Object System.Diagnostics.Eventing.Reader.EventLogWatcher($query)
 
 Register-ObjectEvent `
-    -InputObject $watcher
+    -InputObject $watcher `
     -EventName EventRecordWritten `
     -Action {
         $record = $eventLog.SourceEventArgs.EventRecord
@@ -193,6 +193,7 @@ while ($true)
             $payLoad = $script:eventQueue.ToArray() 
             $jsonBody = $payLoad | ConvertTo-Json -Depth 20 -Compress 
             
+
             # Invoke-RestMethod `
             #     -Uri $LogstashUrl `
             #     -Method POST `
@@ -200,9 +201,9 @@ while ($true)
             #     -ContentType "application/json" `
             #     -TimeoutSec 30 
         
-            $script:lastRecordId | Out-File $StateFile -Force 
-            $script:eventQueue.Clear() 
-            $script:lastFlush = Get-Date 
+            $script:lastRecordId | Out-File $stateRecordFile -Force 
+            $script:eventQueue.Clear()
+            $script:lastFlush = Get-Date
             
             Write-Host "[i] $(Get-Date -Format HH:mm:ss) - Sent batch. Last Record ID: $script:lastRecordId" } 
     } 
