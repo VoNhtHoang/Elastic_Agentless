@@ -168,7 +168,14 @@ Register-ObjectEvent `
         # )
 
         # $script:lastRecordId = $record.RecordId
-        Write-Host "NEW EVENT"
+        $record = $Event.SourceEventArgs.EventRecord
+
+        if ($null -eq $record) {
+            Write-Host "NULL"
+        }
+        else {
+            Write-Host $record.Id
+        }
     }
 
 Write-Host "[i] Realtime watcher started."
