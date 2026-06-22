@@ -3,7 +3,7 @@
 # --------------------------------
 
 # -------------- CONFIG -----------
-$logStashUrl = "http://10.0.1.10:9600"
+$logStashUrl = "http://10.0.1.10:9700"
 
 $stateRecordFile = "C:\ProgramData\ElasticAgentlessScript\state_record.txt"
 $jsonLogFile = "C:\ProgramData\ElasticAgentlessScript\log.json"
