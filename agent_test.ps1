@@ -3,7 +3,7 @@
 # --------------------------------
 
 # -------------- CONFIG -----------
-$logStashUrl = ""
+$logStashUrl = "http://10.0.1.10:9600"
 
 $stateRecordFile = "C:\ProgramData\ElasticAgentlessScript\state_record.txt"
 $jsonLogFile = "C:\ProgramData\ElasticAgentlessScript\log.json"
@@ -264,12 +264,12 @@ while ($true)
             $jsonBody = $payLoad | ConvertTo-Json -Depth 20 -Compress 
 
             $jsonBody | Out-File $jsonLogFile -Encoding utf8 -Append
-            # Invoke-RestMethod `
-            #     -Uri $LogstashUrl `
-            #     -Method POST `
-            #     -Body $jsonBody `
-            #     -ContentType "application/json" `
-            #     -TimeoutSec 30 
+            Invoke-RestMethod `
+                -Uri $LogstashUrl `
+                -Method POST `
+                -Body $jsonBody `
+                -ContentType "application/json" `
+                -TimeoutSec 30 
         
             $global:lastRecordId | Out-File $stateRecordFile -Force
             $global:eventQueue.Clear()
