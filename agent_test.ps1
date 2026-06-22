@@ -27,88 +27,147 @@ if (!(Test-Path $stateRecordFile)){
 
 }
 
-$script:lastRecordId = [long](Get-Content $stateRecordFile)
-$script:eventQueue = New-Object System.Collections.ArrayList
+$global:lastRecordId = [long](Get-Content $stateRecordFile)
+$global:eventQueue =
+    [System.Collections.ArrayList]::Synchronized(
+        (New-Object System.Collections.ArrayList)
+    )
 
-$script:lastFlush = Get-Date
+$global:lastFlush = Get-Date
 
 
 Write-Host "[+] Script Agent Started" -ForegroundColor Cyan
-Write-Host "[+] Last RecordId: $($script:lastRecordId)" -ForegroundColor Cyan
+Write-Host "[+] Last RecordId: $($global:lastRecordId)" -ForegroundColor Cyan
 Write-Host "[i] Checking log from $logName per $intervalTime seconds " -ForegroundColor Cyan
 
 # ----------------- FUNCTION --------------------
-function eventConverter {
-    param (
-        $eventLog
-    )
+function eventConverter { 
+    param( 
+        $eventLog 
+    ) 
+
+    if ($null -eq $eventLog) {
+        return $null 
+    }
+
+    # ------------------------- # Timestamp # ------------------------- 
+    $timestamp = (Get-Date).ToString("o") 
     
+    try { 
+        if ($eventLog.TimeCreated) { 
+            $timestamp = $eventLog.TimeCreated.ToString("o") 
+        } 
+    } 
+    catch {
+
+    } 
+
+    # ------------------------- # Message # ------------------------- 
+    $message = "" 
+    try { 
+        $message = $eventLog.FormatDescription() 
+        if ($null -eq $message) { 
+            $message = "" 
+        } 
+    } 
+    catch {
+        "[ERR] Message: $_" | Out-File C:\ProgramData\ElasticAgentlessScript\err.txt -Append
+    } 
+
+    # ------------------------- # EventData # ------------------------- 
     $eventData = @{}
-    
-    try{
+
+    try {
 
         $xmlData = [xml]$eventLog.ToXml()
 
-        $eventData = @{}
+        if ($xmlData.Event.EventData) {
 
-        if ($xmlData.Event.EventData){  
-            foreach ( $node in $xmlData.Event.EventData.Data){
-                $name = $node.Name
+            $nodes = $xmlData.Event.EventData.Data
 
-                if (![string]::IsNullOrWhiteSpace($Name)) {
-                    $eventData[$name] = $node.'#text'
+            if ($nodes) {
+
+                foreach ($node in @($nodes)) {
+
+                    if (
+                        $null -ne $node -and
+                        $null -ne $node.Name -and
+                        ![string]::IsNullOrWhiteSpace($node.Name)
+                    ) {
+                        $eventData[$node.Name] = $node.'#text'
+                    }
                 }
             }
         }
     }
     catch {
-        return [PSCustomObject]@{ 
-                    "@timestamp" = $eventLog.TimeCreated.ToUniversalTime().ToString("o") 
-                    
-                    host = @{ 
-                        hostname = $eventLog.MachineName 
-                    } 
-                    
-                    event = @{ 
-                        code = $eventLog.Id 
-                        provider = $eventLog.ProviderName 
-                        record_id = $eventLog.RecordId 
-                    } 
-                    
-                    message = $eventLog.Message 
-                    
-                    parse_error = $true }
+        "[ERR] XML Parse: $($_.Exception.Message)" |
+            Out-File C:\ProgramData\ElasticAgentlessScript\err.txt -Append
     }
-
-    return [PSCustomObject]@{ 
-                    "@timestamp" = $eventLog.TimeCreated.ToUniversalTime().ToString("o") 
-                    
-                    host = @{ 
-                        hostname = $eventLog.MachineName
-                    } 
-                    event = @{ 
-                        code = $eventLog.Id 
-                        provider = $eventLog.ProviderName 
-                        level = $eventLog.LevelDisplayName 
-                        record_id = $eventLog.RecordId 
-                        task = $eventLog.TaskDisplayName 
-                    } 
-                        
-                    winlog = @{ channel = $LogName } 
-                        
-                    agent = @{ type = "Powershell-Agentless" } 
-
-                    user = @{ name = $eventData["TargetUserName"] } 
-                    source = @{ ip = $eventData["IpAddress"] } 
-                    
-                    process = @{ name = $eventData["ProcessName"] 
-                    pid = $eventData["ProcessId"] } 
-                    logon = @{ type = $eventData["LogonType"] } 
-                    eventdata = $eventData 
-                    message = $eventLog.Message 
-                }
-
     
+    # ------------------------- # Safe fields # ------------------------- 
+    $eventId = $null 
+    $provider = "" 
+    $level = "" 
+    $recordId = 0 
+    $task = "" 
+    
+    try { $eventId = $eventLog.Id } catch {} 
+    try { $provider = $eventLog.ProviderName } catch {} 
+    try { $level = $eventLog.LevelDisplayName } catch {} 
+    try { $recordId = $eventLog.RecordId } catch {} 
+    try { $task = $eventLog.TaskDisplayName } catch {} 
+
+    # ------------------------- # Return object # ------------------------- 
+    $customRes = $null
+    try{ 
+        $customRes = [PSCustomObject]@{ 
+            "@timestamp" = $timestamp 
+            host = @{ 
+                hostname = $env:COMPUTERNAME 
+            } 
+            event = @{ 
+                code = $eventId 
+                provider = $provider 
+                level = $level 
+                record_id = $recordId 
+                task = $task 
+            } 
+            winlog = @{ channel = $LogName } 
+            agent = @{ type = "Powershell-Agentless" } 
+            user = @{ name = $eventData["TargetUserName"] } 
+            source = @{ ip = $eventData["IpAddress"] } 
+            process = @{ name = $eventData["ProcessName"] 
+            pid = $eventData["ProcessId"] } 
+            logon = @{ type = $eventData["LogonType"] } 
+            eventdata = $eventData 
+            message = $message 
+        } 
+    }
+    catch{
+        return [PSCustomObject]@{ 
+            "@timestamp" = if ($eventLog.TimeCreated) {
+                $eventLog.TimeCreated.ToString("o")
+            }
+            else {
+                (Get-Date).ToString("o")
+            }
+            
+            host = @{ 
+                hostname = $env:COMPUTERNAME
+            } 
+            
+            event = @{ 
+                code = $eventLog.Id 
+                provider = $eventLog.ProviderName 
+                record_id = $eventLog.RecordId 
+            } 
+            
+            message = $eventLog.FormatDescription() # $eventLog.FormatDescription()
+            
+            parse_error = $true }
+    }
+    return $customRes
 }
 
 # --------------- On Startup --------------
@@ -118,7 +177,7 @@ function eventConverter {
 # <QueryList>
 #     <Query Id="0" Path="$LogName"> 
 #         <Select Path="$LogName"> 
-#             *[System[(EventRecordID > $($script:lastRecordId))]] 
+#             *[System[(EventRecordID > $($global:lastRecordId))]] 
 #         </Select> 
 #     </Query> 
 # </QueryList>
@@ -128,8 +187,8 @@ function eventConverter {
 #     $missedEvents = Get-WinEvent -FilterXml $recoveryQuery
     
 #     foreach ($eventLog in $missedEvents) { 
-#         [void]$script:eventQueue.Add( (eventConverter $eventLog) )     
-#         $script:lastRecordId = $eventLog.RecordId 
+#         [void]$global:eventQueue.Add( (eventConverter $eventLog) )     
+#         $global:lastRecordId = $eventLog.RecordId 
 #     } 
     
 #     Write-Host "[i] Recovery events: $($missedEvents.Count)" -ForegroundColor Green
@@ -147,7 +206,7 @@ $query = New-Object System.Diagnostics.Eventing.Reader.EventLogQuery(
     )
 
 $watcher = New-Object System.Diagnostics.Eventing.Reader.EventLogWatcher($query)
-$watcher.Enabled = $true
+
 
 Register-ObjectEvent `
     -InputObject $watcher `
@@ -160,48 +219,82 @@ Register-ObjectEvent `
                 return
             }
 
-            # if ($record.RecordId -le $script:lastRecordId) { 
-            #     return
-            # }
+            if ($record.RecordId -le $global:lastRecordId) { 
+                return
+            }
 
-            [void] $script:eventQueue.Add(
-                (eventConverter $record)
-            )
+            $objEvent = eventConverter $record
+            if ($objEvent -eq $null){
+                "[ERR] objNull: $_" | Out-File C:\ProgramData\ElasticAgentlessScript\err.txt -Append
+            }
             
-            Write-Host "$record.Id"
-            $script:lastRecordId = $record.RecordId
+            [void] $global:eventQueue.Add($objEvent)
+            
+            $global:lastRecordId = $record.RecordId
+            
         }
-        catch{
-            "[ERR] ObjectEvent: $_" | Out-File C:\ProgramData\ElasticAgentlessScript\err.txt -Append
+        catch{            
+            "[ERR] ObjectEvent: $($_.Exception.Message) | $($_.InvocationInfo.PositionMessage)
+ | $($_.ScriptStackTrace) | $($_.Exception.GetType().FullName)" | Out-File C:\ProgramData\ElasticAgentlessScript\err.txt -Append
         }
-
     }
 
-Write-Host "[i] Realtime watcher started."
+# -------------------- Powershell >5.1 ----------------------
+# $watcher.add_EventRecordWritten({
+#     param($sender,$e)
+
+#     $record = $e.EventRecord
+
+#     $obj = eventConverter $record
+
+#     [void]$global:eventQueue.Add($obj)
+# })
+
+# $watcher.add_EventRecordWritten({
+
+#     param($sender,$e)
+
+#     try {
+
+#         Write-Host "NEW EVENT"
+
+#         $record = $e.EventRecord
+
+#         Write-Host $record.Id
+
+#     }
+#     catch {
+#         $_ | Out-File C:\temp\err.txt -Append
+#     }
+# })
+
+$watcher.Enabled = $true
+
 
 # -------------- FLUSH LOOP ----------------------
+Write-Host "[i] Realtime watcher started."
 while ($true)
 {
     try
     {
         $needFlush = $false
 
-        if ($script:eventQueue.Count -ge $batchSize){
+        if ($global:eventQueue.Count -ge $batchSize){
             $needFlush = $true
         }
 
         if (
-            ((Get-Date) - $script:lastFlush).TotalSeconds -ge $intervalTime -and `
-            $script:eventQueue.Count -gt 0
+            ((Get-Date) - $global:lastFlush).TotalSeconds -ge $intervalTime -and `
+            $global:eventQueue.Count -gt 0
         ){
             $needFlush = $true
         }
 
         if ($needFlush) { 
-            $payLoad = $script:eventQueue.ToArray() 
+            $payLoad = $global:eventQueue.ToArray() 
             $jsonBody = $payLoad | ConvertTo-Json -Depth 20 -Compress 
 
-            $jsonBody | Out-File $jsonLogFile -Encoding utf8 -Force
+            $jsonBody | Out-File $jsonLogFile -Encoding utf8 -Append
             # Invoke-RestMethod `
             #     -Uri $LogstashUrl `
             #     -Method POST `
@@ -209,11 +302,11 @@ while ($true)
             #     -ContentType "application/json" `
             #     -TimeoutSec 30 
         
-            $script:lastRecordId | Out-File $stateRecordFile -Force 
-            $script:eventQueue.Clear()
-            $script:lastFlush = Get-Date
+            $global:lastRecordId | Out-File $stateRecordFile -Force
+            $global:eventQueue.Clear()
+            $global:lastFlush = Get-Date
             
-            Write-Host "[i] $(Get-Date -Format HH:mm:ss) - Sent batch. Last Record ID: $script:lastRecordId" 
+            Write-Host "[i] $(Get-Date -Format HH:mm:ss) - Sent batch. Last Record ID: $global:lastRecordId" 
 
             $needFlush = $false
         }
@@ -223,6 +316,7 @@ while ($true)
         Write-Host "[ERR] Error Occurred: $_" 
     }
 
-    Start-Sleep -Seconds 1
+    # Start-Sleep -Seconds 1
+     Wait-Event -Timeout 1
 }
 
