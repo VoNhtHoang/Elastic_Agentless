@@ -153,21 +153,28 @@ Register-ObjectEvent `
     -InputObject $watcher `
     -EventName EventRecordWritten `
     -Action {
-        $record = $Event.SourceEventArgs.EventRecord
+        try{
+            $record = $Event.SourceEventArgs.EventRecord
 
-        if ($null -eq $record){
-            return
+            if ($null -eq $record){
+                return
+            }
+
+            # if ($record.RecordId -le $script:lastRecordId) { 
+            #     return
+            # }
+
+            [void] $script:eventQueue.Add(
+                (eventConverter $record)
+            )
+            
+            Write-Host "$record.Id"
+            $script:lastRecordId = $record.RecordId
+        }
+        catch{
+            "[ERR] ObjectEvent: $_" | Out-File C:\ProgramData\ElasticAgentlessScript\err.txt -Append
         }
 
-        # if ($record.RecordId -le $script:lastRecordId) { 
-        #     return
-        # }
-
-        [void] $script:eventQueue.Add(
-            (eventConverter $record)
-        )
-        Write-Host "$record.Id"
-        $script:lastRecordId = $record.RecordId
     }
 
 Write-Host "[i] Realtime watcher started."
@@ -181,7 +188,6 @@ while ($true)
 
         if ($script:eventQueue.Count -ge $batchSize){
             $needFlush = $true
-
         }
 
         if (
@@ -207,7 +213,11 @@ while ($true)
             $script:eventQueue.Clear()
             $script:lastFlush = Get-Date
             
-            Write-Host "[i] $(Get-Date -Format HH:mm:ss) - Sent batch. Last Record ID: $script:lastRecordId" } 
+            Write-Host "[i] $(Get-Date -Format HH:mm:ss) - Sent batch. Last Record ID: $script:lastRecordId" 
+
+            $needFlush = $false
+        }
+
     } 
     catch { 
         Write-Host "[ERR] Error Occurred: $_" 
