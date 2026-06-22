@@ -6,7 +6,9 @@
 $logStashUrl = ""
 
 $stateRecordFile = "C:\ProgramData\ElasticAgentlessScript\state_record.txt"
+$jsonLogFile = "C:\ProgramData\ElasticAgentlessScript\log.json"
 $logName = "Security"
+
 
 $intervalTime = 20 # second
 $batchSize = 100
@@ -110,32 +112,32 @@ function eventConverter {
 }
 
 # --------------- On Startup --------------
-Write-Host "[i] Replaying missed events..."
+# Write-Host "[i] Replaying missed events..."
 
-$recoveryQuery = @"
-<QueryList>
-    <Query Id="0" Path="$LogName"> 
-        <Select Path="$LogName"> 
-            *[System[(EventRecordID > $($script:lastRecordId))]] 
-        </Select> 
-    </Query> 
-</QueryList>
-"@
+# $recoveryQuery = @"
+# <QueryList>
+#     <Query Id="0" Path="$LogName"> 
+#         <Select Path="$LogName"> 
+#             *[System[(EventRecordID > $($script:lastRecordId))]] 
+#         </Select> 
+#     </Query> 
+# </QueryList>
+# "@
         
-try { 
-    $missedEvents = Get-WinEvent -FilterXml $recoveryQuery
+# try { 
+#     $missedEvents = Get-WinEvent -FilterXml $recoveryQuery
     
-    foreach ($eventLog in $missedEvents) { 
-        [void]$script:eventQueue.Add( (eventConverter $eventLog) )     
-        $script:lastRecordId = $eventLog.RecordId 
-    } 
+#     foreach ($eventLog in $missedEvents) { 
+#         [void]$script:eventQueue.Add( (eventConverter $eventLog) )     
+#         $script:lastRecordId = $eventLog.RecordId 
+#     } 
     
-    Write-Host "[i] Recovery events: $($missedEvents.Count)" -ForegroundColor Green
+#     Write-Host "[i] Recovery events: $($missedEvents.Count)" -ForegroundColor Green
     
-} 
-catch { 
-    Write-Host "[ERR] Error occurred: $_"
-}
+# } 
+# catch { 
+#     Write-Host "[ERR] Error occurred: $_"
+# }
 
 
 # ---------------- Realtime Callback ------------
@@ -192,8 +194,8 @@ while ($true)
         if ($needFlush) { 
             $payLoad = $script:eventQueue.ToArray() 
             $jsonBody = $payLoad | ConvertTo-Json -Depth 20 -Compress 
-            
 
+            $jsonBody | Out-File $jsonLogFile -Encoding utf8 -Force
             # Invoke-RestMethod `
             #     -Uri $LogstashUrl `
             #     -Method POST `
