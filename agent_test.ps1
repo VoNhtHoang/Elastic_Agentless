@@ -153,29 +153,21 @@ Register-ObjectEvent `
     -InputObject $watcher `
     -EventName EventRecordWritten `
     -Action {
-        # $record = $eventLog.SourceEventArgs.EventRecord
-
-        # if ($null -eq $record){
-        #     return
-        # }
-
-        # if ($record.RecordId -le $script:lastRecordId) { 
-        #     return 
-        # }
-
-        # [void] $script:eventQueue.Add(
-        #     (eventConverter $record)
-        # )
-
-        # $script:lastRecordId = $record.RecordId
         $record = $Event.SourceEventArgs.EventRecord
 
-        if ($null -eq $record) {
-            Write-Host "NULL"
+        if ($null -eq $record){
+            return
         }
-        else {
-            Write-Host $record.Id
+
+        if ($record.RecordId -le $script:lastRecordId) { 
+            return
         }
+
+        [void] $script:eventQueue.Add(
+            (eventConverter $record)
+        )
+
+        $script:lastRecordId = $record.RecordId
     }
 
 Write-Host "[i] Realtime watcher started."
