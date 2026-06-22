@@ -35,7 +35,7 @@ $script:lastFlush = Get-Date
 
 Write-Host "[+] Script Agent Started" -ForegroundColor Cyan
 Write-Host "[+] Last RecordId: $($script:lastRecordId)" -ForegroundColor Cyan
-Write-Host "[i] Checking log from $logName mỗi $intervalTime seconds " -ForegroundColor Cyan
+Write-Host "[i] Checking log from $logName per $intervalTime seconds " -ForegroundColor Cyan
 
 # ----------------- FUNCTION --------------------
 function eventConverter {
@@ -147,29 +147,30 @@ $query = New-Object System.Diagnostics.Eventing.Reader.EventLogQuery(
     )
 
 $watcher = New-Object System.Diagnostics.Eventing.Reader.EventLogWatcher($query)
+$watcher.Enabled = $true
 
 Register-ObjectEvent `
     -InputObject $watcher `
     -EventName EventRecordWritten `
     -Action {
-        $record = $eventLog.SourceEventArgs.EventRecord
+        # $record = $eventLog.SourceEventArgs.EventRecord
 
-        if ($null -eq $record){
-            return
-        }
+        # if ($null -eq $record){
+        #     return
+        # }
 
-        if ($record.RecordId -le $script:lastRecordId) { 
-            return 
-        }
+        # if ($record.RecordId -le $script:lastRecordId) { 
+        #     return 
+        # }
 
-        [void] $script:eventQueue.Add(
-            (eventConverter $record)
-        )
+        # [void] $script:eventQueue.Add(
+        #     (eventConverter $record)
+        # )
 
-        $script:lastRecordId = $record.RecordId
+        # $script:lastRecordId = $record.RecordId
+        Write-Host "NEW EVENT"
     }
 
-$watcher.Enabled = $true
 Write-Host "[i] Realtime watcher started."
 
 # -------------- FLUSH LOOP ----------------------
