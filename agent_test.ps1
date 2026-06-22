@@ -159,14 +159,14 @@ Register-ObjectEvent `
             return
         }
 
-        if ($record.RecordId -le $script:lastRecordId) { 
-            return
-        }
+        # if ($record.RecordId -le $script:lastRecordId) { 
+        #     return
+        # }
 
         [void] $script:eventQueue.Add(
             (eventConverter $record)
         )
-
+        Write-Host "$record.Id"
         $script:lastRecordId = $record.RecordId
     }
 
