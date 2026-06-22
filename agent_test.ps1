@@ -10,7 +10,7 @@ $jsonLogFile = "C:\ProgramData\ElasticAgentlessScript\log.json"
 $logName = "Security"
 
 
-$intervalTime = 20 # second
+$intervalTime = 15 # second
 $batchSize = 100
 
 # -------------- INIT -------------
@@ -218,56 +218,25 @@ Register-ObjectEvent `
             if ($null -eq $record){
                 return
             }
-
             if ($record.RecordId -le $global:lastRecordId) { 
                 return
             }
 
             $objEvent = eventConverter $record
-            if ($objEvent -eq $null){
-                "[ERR] objNull: $_" | Out-File C:\ProgramData\ElasticAgentlessScript\err.txt -Append
-            }
-            
             [void] $global:eventQueue.Add($objEvent)
             
             $global:lastRecordId = $record.RecordId
             
         }
         catch{            
-            "[ERR] ObjectEvent: $($_.Exception.Message) | $($_.InvocationInfo.PositionMessage)
- | $($_.ScriptStackTrace) | $($_.Exception.GetType().FullName)" | Out-File C:\ProgramData\ElasticAgentlessScript\err.txt -Append
+            "[ERR] ObjectEvent: $($_.Exception.Message)`
+            $($_.InvocationInfo.PositionMessage)`
+            $($_.ScriptStackTrace)`
+            $($_.Exception.GetType().FullName)" | Out-File C:\ProgramData\ElasticAgentlessScript\err.txt -Append
         }
     }
 
 # -------------------- Powershell >5.1 ----------------------
-# $watcher.add_EventRecordWritten({
-#     param($sender,$e)
-
-#     $record = $e.EventRecord
-
-#     $obj = eventConverter $record
-
-#     [void]$global:eventQueue.Add($obj)
-# })
-
-# $watcher.add_EventRecordWritten({
-
-#     param($sender,$e)
-
-#     try {
-
-#         Write-Host "NEW EVENT"
-
-#         $record = $e.EventRecord
-
-#         Write-Host $record.Id
-
-#     }
-#     catch {
-#         $_ | Out-File C:\temp\err.txt -Append
-#     }
-# })
-
 $watcher.Enabled = $true
 
 
@@ -317,6 +286,6 @@ while ($true)
     }
 
     # Start-Sleep -Seconds 1
-     Wait-Event -Timeout 1
+    Wait-Event -Timeout 1
 }
 
